@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tracker Pro V3 - Cloud Sync</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --bg: #f0f4f8; --card: #ffffff; --primary: #4a90e2; --jours: #2c3e50; --hebdo: #8e44ad;
+            --live: #e74c3c; --differe: #f39c12; --pm: #27ae60; --success: #00d2d3; --undo: #95a5a6;
+        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; -webkit-user-select: none; }
+        
+        /* ÉCRAN DE VERROUILLAGE */
+        #lock-screen { position: fixed; top:0; left:0; width:100%; height:100%; background: var(--jours); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
+        .pin-display { font-size: 2rem; margin-bottom: 20px; letter-spacing: 10px; height: 40px; }
+        .numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        .num-btn { width: 70px; height: 70px; border-radius: 50%; border: 1px solid white; background: none; color: white; font-size: 1.5rem; cursor: pointer; }
+        .num-btn:active { background: rgba(255,255,255,0.2); }
+
+        /* INTERFACE PRINCIPALE */
+        .container { width: 100%; max-width: 480px; display: none; }
+        .top-bar { display: flex; justify-content: space-between; margin-bottom: 15px; gap: 10px; }
+        .top-btn { flex: 1; padding: 10px; border-radius: 10px; border: none; color: white; font-weight: bold; font-size: 0.8rem; cursor: pointer; text-align: center; }
+
+        .geo-card { background: white; padding: 15px; border-radius: 15px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        select { width: 100%; padding: 12px; margin: 5px 0; border-radius: 8px; border: 1px solid #ddd; font-size: 1rem; appearance: none; }
+
+        .counter-card { background: var(--card); border-radius: 20px; padding: 15px; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); text-align: center; position: relative; overflow: hidden; }
+        .badge { position: absolute; top: 10px; right: 15px; font-size: 1.8rem; display: none; }
+        .label { font-weight: bold; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px; color: #7f8c8d; }
+        .number { font-size: 2.8rem; font-weight: 900; margin: 5px 0; line-height: 1; }
+
+        .hebdo-box { background: linear-gradient(135deg, var(--hebdo), #9b59b6); color: white; border-radius: 20px; padding: 15px; margin-bottom: 15px; }
+        .hebdo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+        .hebdo-item { background: rgba(255,255,255,0.15); padding: 10px; border-radius: 12px; text-align: center; }
+        .hebdo-val { font-weight: 900; font-size: 1.2rem; display: block; }
+
+        .controls { display: flex; justify-content: center; gap: 20px; align-items: center; margin-top: 10px; }
+        .btn-add { width: 60px; height: 60px; border-radius: 15px; border: none; color: white; font-size: 1.8rem; cursor: pointer; box-shadow: 0 4px 0 rgba(0,0,0,0.2); }
+        .btn-sub { width: 45px; height: 45px; border-radius: 12px; border: none; background: #eee; color: #999; font-size: 1.2rem; }
+
+        .progress-bg { background: #eee; border-radius: 10px; height: 8px; margin-top: 15px; }
+        .progress-fill { height: 100%; border-radius: 10px; transition: width 0.5s; }
+
+        .recap-table { background: white; border-radius: 15px; padding: 15px; width: 100%; box-sizing: border-box; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th { text-align: left; color: #999; padding-bottom: 10px; }
+        td { padding: 8px 0; border-bottom: 1px solid #f0f0f0; }
+
+        .btn-action { width: 100%; padding: 15px; border-radius: 15px; border: none; font-weight: bold; margin-top: 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div id="lock-screen">
+    <div id="lock-msg" style="margin-bottom: 10px;">Entrez votre code PIN</div>
+    <div class="pin-display" id="pin-dots"></div>
+    <div class="numpad">
+        <button class="num-btn" onclick="pressNum('1')">1</button>
+        <button class="num-btn" onclick="pressNum('2')">2</button>
+        <button class="num-btn" onclick="pressNum('3')">3</button>
+        <button class="num-btn" onclick="pressNum('4')">4</button>
+        <button class="num-btn" onclick="pressNum('5')">5</button>
+        <button class="num-btn" onclick="pressNum('6')">6</button>
+        <button class="num-btn" onclick="pressNum('7')">7</button>
+        <button class="num-btn" onclick="pressNum('8')">8</button>
+        <button class="num-btn" onclick="pressNum('9')">9</button>
+        <button class="num-btn" style="border:none" onclick="pressNum('C')">C</button>
+        <button class="num-btn" onclick="pressNum('0')">0</button>
+        <button class="num-btn" style="border:none; font-size: 1rem;" onclick="checkPin()">OK</button>
+    </div>
+</div>
+
+<div class="container" id="app">
+    <div class="top-bar">
+        <button class="top-btn" style="background:var(--undo)" onclick="location.reload()">🔒 Verrou</button>
+        <button class="top-btn" style="background:var(--primary)" onclick="shareSync()">Sync 🔗</button>
+        <button class="top-btn" style="background:var(--undo); display:none;" id="btn-undo" onclick="undo()">↩ Annuler</button>
+    </div>
+
+    <div class="geo-card">
+        <div class="label" style="color:var(--primary)">Secteur Actuel</div>
+        <select id="sel-dept" onchange="loadCities()"></select>
+        <select id="sel-city"></select>
+    </div>
+
+    <div class="counter-card" style="border-top: 5px solid var(--jours)">
+        <div class="label">Total Jours (Mois)</div>
+        <div class="number" id="txt-jours">0</div>
+        <div class="controls">
+            <button class="btn-sub" onclick="update('jours', -1)">-</button>
+            <button class="btn-add" style="background:var(--jours)" onclick="update('jours', 1)">+</button>
+        </div>
+    </div>
+
+    <div class="hebdo-box">
+        <div style="display:flex; justify-content:space-between; align-items:center">
+            <span class="label" style="color:white">Objectif Semaine</span>
+            <button onclick="resetWeek()" style="background:rgba(255,255,255,0.2); border:none; color:white; border-radius:5px; padding:2px 8px; font-size:0.6rem">NOUVELLE SEM.</button>
+        </div>
+        <div class="hebdo-grid">
+            <div class="hebdo-item"><span class="hebdo-lab">LIVES</span><span class="hebdo-val" id="h-live">0/8</span></div>
+            <div class="hebdo-item"><span class="hebdo-lab">DIFF.</span><span class="hebdo-val" id="h-differe">0/12</span></div>
+            <div class="hebdo-item"><span class="hebdo-lab">PM</span><span class="hebdo-val" id="h-pm">0/12</span></div>
+        </div>
+    </div>
+
+    <div id="main-counters"></div>
+
+    <div class="recap-table">
+        <div class="label" style="margin-bottom:10px">Bilan par Localisation</div>
+        <table><thead><tr><th>Ville</th><th>L</th><th>D</th><th>PM</th></tr></thead><tbody id="recap-body"></tbody></table>
+    </div>
+
+    <button class="btn-action" style="background:var(--pm); color:white" onclick="toExcel()">📥 EXPORTER EXCEL (.xlsx)</button>
+    <button class="btn-action" style="background:none; color:#999; border:1px solid #ccc; font-size:0.7rem;" onclick="resetAll()">RESET MENSUEL</button>
+</div>
+
+<script>
+// --- DONNÉES ---
+const LIEUX = {
+    "Nord 59": ["Lille","Valenciennes","Douai","Dunkerque","Cambrai","Maubeuge","Armentières","Saint Amand Les Eaux","Hazebrouck","Denain","Cysoing","La Bassée","Fourmies","Le Quesnoy","Sivu","Sivom","La Gorgue","Gravelines","Annoeullin"],
+    "Pas de calais 62": ["Lens","Béthune","Saint Omer","Boulogne-sur-Mer","Calais","Bruay-la-Buissière","Hénin-Beaumont","Berck","Hesdin","Lillers"],
+    "Somme 80": ["Amiens","Abbeville","Albert","Roye","Friville","Flixecourt","Airaines"],
+    "Aisne 02": ["Saint Quentin","Soissons","Laon","Château Thierry","Chauny","Vervins"],
+    "Oise 60": ["Beauvais","Compiègne","Creil","Noyon","Clermont","Breteuil","Grandvilliers"]
+};
+
+const CONFIG = {
+    live: { lab: "Lives", max: 32, col: "var(--live)" },
+    differe: { lab: "Différés", max: 48, col: "var(--differe)" },
+    pm: { lab: "PM", max: 50, col: "var(--pm)" }
+};
+
+let stats = JSON.parse(localStorage.getItem('trackerDataV3')) || { jours: 0, live: 0, differe: 0, pm: 0, hLive: 0, hDiffere: 0, hPm: 0, geo: {} };
+let lastState = null;
+let currentPinInput = "";
+
+// --- PIN SECURITY ---
+function pressNum(n) {
+    if(n==='C') currentPinInput = "";
+    else if(currentPinInput.length < 4) currentPinInput += n;
+    document.getElementById('pin-dots').innerText = "•".repeat(currentPinInput.length);
+}
+
+function checkPin() {
+    let savedPin = localStorage.getItem('appPin');
+    if(!savedPin) {
+        if(currentPinInput.length === 4) {
+            localStorage.setItem('appPin', currentPinInput);
+            unlock();
+        } else alert("Créez un code à 4 chiffres");
+    } else {
+        if(currentPinInput === savedPin) unlock();
+        else { alert("Code faux"); currentPinInput = ""; pressNum('C'); }
+    }
+}
+
+function unlock() {
+    document.getElementById('lock-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+}
+
+// --- LOGIQUE CORE ---
+function init() {
+    const dSel = document.getElementById('sel-dept');
+    Object.keys(LIEUX).forEach(d => dSel.add(new Option(d, d)));
+    loadCities();
+    
+    const container = document.getElementById('main-counters');
+    for(let k in CONFIG) {
+        container.innerHTML += `
+            <div class="counter-card" style="border-left: 8px solid ${CONFIG[k].col}">
+                <div class="badge" id="badge-${k}">🥇</div>
+                <div class="label" style="color:${CONFIG[k].col}">${CONFIG[k].lab}</div>
+                <div class="number" id="v-${k}">0</div>
+                <div class="label" id="target-${k}" style="font-size:0.6rem">Cible : 0</div>
+                <div class="controls">
+                    <button class="btn-sub" onclick="update('${k}', -1)">-</button>
+                    <button class="btn-add" style="background:${CONFIG[k].col}" onclick="update('${k}', 1)">+</button>
+                </div>
+                <div class="progress-bg"><div id="bar-${k}" class="progress-fill" style="background:${CONFIG[k].col}"></div></div>
+            </div>`;
+    }
+    
+    // Check for Sync Link
+    const urlParams = new URLSearchParams(window.location.search);
+    if(urlParams.has('data')) {
+        if(confirm("Importer les données partagées ?")) {
+            stats = JSON.parse(atob(urlParams.get('data')));
+            save();
+            window.history.replaceState({}, '', window.location.pathname);
+        }
+    }
+    updateUI();
+}
+
+function loadCities() {
+    const cSel = document.getElementById('sel-city');
+    cSel.innerHTML = "";
+    LIEUX[document.getElementById('sel-dept').value].sort().forEach(c => cSel.add(new Option(c, c)));
+}
+
+function update(type, val) {
+    lastState = JSON.parse(JSON.stringify(stats));
+    document.getElementById('btn-undo').style.display = "block";
+    
+    if(type === 'jours') {
+        stats.jours = Math.max(0, stats.jours + val);
+    } else {
+        const city = `${document.getElementById('sel-city').value} (${document.getElementById('sel-dept').value})`;
+        stats[type] = Math.max(0, stats[type] + val);
+        // Update Hebdo
+        if(type === 'live') stats.hLive = Math.max(0, stats.hLive + val);
+        if(type === 'differe') stats.hDiffere = Math.max(0, stats.hDiffere + val);
+        if(type === 'pm') stats.hPm = Math.max(0, stats.hPm + val);
+        // Update Geo
+        if(!stats.geo[city]) stats.geo[city] = { live:0, differe:0, pm:0 };
+        stats.geo[city][type] = Math.max(0, stats.geo[city][type] + val);
+        if(Object.values(stats.geo[city]).every(v => v === 0)) delete stats.geo[city];
+    }
+    save();
+    updateUI();
+}
+
+function updateUI() {
+    document.getElementById('txt-jours').innerText = stats.jours;
+    document.getElementById('h-live').innerText = `${stats.hLive}/${Math.ceil((CONFIG.live.max/20)*5)}`;
+    document.getElementById('h-differe').innerText = `${stats.hDiffere}/${Math.ceil((CONFIG.differe.max/20)*5)}`;
+    document.getElementById('h-pm').innerText = `${stats.hPm}/${Math.ceil((CONFIG.pm.max/20)*5)}`;
+
+    for(let k in CONFIG) {
+        const target = Math.min(Math.ceil((CONFIG[k].max/20)*stats.jours), CONFIG[k].max);
+        document.getElementById(`v-${k}`).innerText = stats[k];
+        document.getElementById(`target-${k}`).innerText = `Objectif (${stats.jours}j) : ${target} / ${CONFIG[k].max}`;
+        document.getElementById(`bar-${k}`).style.width = Math.min((stats[k]/CONFIG[k].max)*100, 100) + "%";
+        document.getElementById(`badge-${k}`).style.display = (stats[k] >= target && target > 0) ? "block" : "none";
+    }
+
+    const body = document.getElementById('recap-body');
+    body.innerHTML = "";
+    Object.keys(stats.geo).sort().forEach(loc => {
+        body.innerHTML += `<tr><td>${loc}</td><td>${stats.geo[loc].live}</td><td>${stats.geo[loc].differe}</td><td>${stats.geo[loc].pm}</td></tr>`;
+    });
+}
+
+function shareSync() {
+    const link = window.location.origin + window.location.pathname + "?data=" + btoa(JSON.stringify(stats));
+    if(navigator.share) {
+        navigator.share({ title: 'Sync Tracker', url: link });
+    } else {
+        navigator.clipboard.writeText(link);
+        alert("Lien de synchro copié ! Envoie-le sur l'autre téléphone.");
+    }
+}
+
+function toExcel() {
+    const wb = XLSX.utils.book_new();
+    const dataSynthese = [["Synthèse", "Total"], ["Jours", stats.jours], ["Lives", stats.live], ["Différés", stats.differe], ["PM", stats.pm]];
+    const ws1 = XLSX.utils.aoa_to_sheet(dataSynthese);
+    XLSX.utils.book_append_sheet(wb, ws1, "Stats");
+
+    const dataDetail = [["Localisation", "Lives", "Différés", "PM"]];
+    Object.keys(stats.geo).sort().forEach(l => dataDetail.push([l, stats.geo[l].live, stats.geo[l].differe, stats.geo[l].pm]));
+    const ws2 = XLSX.utils.aoa_to_sheet(dataDetail);
+    XLSX.utils.book_append_sheet(wb, ws2, "Détails");
+    XLSX.writeFile(wb, "Bilan_Activite.xlsx");
+}
+
+function undo() { if(lastState) { stats = lastState; lastState = null; document.getElementById('btn-undo').style.display="none"; save(); updateUI(); } }
+function resetWeek() { if(confirm("Nouv. Semaine ?")) { stats.hLive=0; stats.hDiffere=0; stats.hPm=0; save(); updateUI(); } }
+function resetAll() { if(confirm("Effacer TOUT le mois ?")) { stats = { jours:0, live:0, differe:0, pm:0, hLive:0, hDiffere:0, hPm:0, geo:{} }; save(); updateUI(); } }
+function save() { localStorage.setItem('trackerDataV3', JSON.stringify(stats)); }
+
+init();
+</script>
+</body>
+</html>
